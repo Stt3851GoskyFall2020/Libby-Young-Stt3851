@@ -1,0 +1,297 @@
+---
+title: "Project 2"
+author: "Grace Brislin, Libby Young, Zoe Robino"
+date: "5/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center", comment = NA, options(scipen=999))
+library(tidyverse)
+library(knitr)
+library(dplyr)
+library(moderndive)
+library(ggplot2)
+
+library(ISLR)
+library(skimr)
+library(plotly)
+library(caret)
+library(Matrix)
+```
+
+```{r}
+library(readxl)
+housing <- read_excel("stt 3851/housing.xlsx")
+View(housing)
+```
+
+```{r}
+library(skimr)
+Housing$id <- NULL
+Housing$yearbuilt <- NULL
+skim(Housing)
+```
+
+#### a.Consider the model that you arrived at in the previous project as the first candidate model.
+
+```{r}
+library(car)
+model1<- lm(price ~ size:lot +  size:bath + status + elem, data = Housing)
+summary(model1)
+```
+
+```{r}
+vif(model1)
+par(mfrow = c(2, 2))
+plot(model1)
+```
+
+The model we chose in the end of prject 1:
++multiple r squared of .4959 which is decent but not good
++not a great f-statistic
++great p-value
+
+#### b.  Create a second candidate model by using regsubsets over the entire data set.  You can decide whether you prefer overall selection, forward selection, or backward selection, and you can decide which statistic you will use to determine the best model from the regsubsets process.  Just conduct a justifiable model selection process and report the predictors in your final model.
+
+```{r}
+library(leaps)
+regfit.full= regsubsets(price~.,Housing)
+summary(regfit.full)
+```
+
+
+```{r}
+library(leaps)
+regfit.full <- regsubsets(price ~.,data = Housing, nvmax=13, really.big = TRUE)
+
+reg.summary <- summary(regfit.full)
+
+names(reg.summary)
+
+```
+
+```{r}
+reg.summary$rsq
+```
+
+```{r}
+par(mfrow = c(2,2))
+plot(reg.summary$rss, xlab="Number of variables", ylab = "RSS", type = "l")
+plot(reg.summary$adjr2, xlab="Number of variables", ylab = "Adjusted RSq,", type = "l")
+```
+
+```{r}
+which.max(reg.summary$adjr2)
+
+```
+```{r}
+plot(reg.summary$cp,xlab="Number of Variables",ylab="Cp",type='l')
+which.min(reg.summary$cp)
+points(6,reg.summary$adjr2[6], col="red",cex=2,pch=20) 
+which.min(reg.summary$bic)
+
+plot(reg.summary$bic,xlab="Number of Variables",ylab="BIC",type='l')
+points(6,reg.summary$bic[6],col="red",cex=2,pch=20)
+```
+
+```{r}
+plot(regfit.full,scale ="r2")
+plot(regfit.full,scale ="adjr2")
+plot(regfit.full,scale ="Cp")
+plot(regfit.full,scale ="bic")
+```
+
+```{r}
+coef(regfit.full,9)
+```
+
+```{r}
+regfit.fwd <- regsubsets(price ~.,data = Housing, nvmax=13,method="forward")
+
+summary(regfit.fwd)
+```
+
+```{r}
+regfit.bwd <- regsubsets(price ~.,data = Housing, nvmax=13,method="backward")
+
+summary(regfit.bwd)
+```
+
+```{r}
+coef(regfit.fwd,9)
+```
+
+```{r}
+coef(regfit.bwd,9)
+```
+
+```{r}
+#used backward stepwise selection
+model2 <- lm(price ~ size + lot + bedrooms + status + elem + garagesize,  data = Housing)
+summary(model2)
+```
+
+We decided to use backwards selection so that the worst predictords would be removed first. 
+
+
+#### c. Create a training/test split of the data by which roughly half of the 76 observations are training data and half are test data.
+
+```{r}
+set.seed(13)
+trainset <- sample(nrow(Housing), nrow(Housing) * 0.5, replace = FALSE)
+train <- Housing[trainset,]
+test <- Housing[-trainset,]
+```
+
+
+
+#### d. Now use regsubsets over only the training data to determine the number of predictors that should be in your final model.  Then use regsubsets over the entire data set with the determined number of variables to determine your third candidate model.
+
+```{r}
+regfit.best <- regsubsets(price ~ size + lot + bath + bedrooms + agestandardized + garagesize + status + elem, data = train, nvmax = 13)
+```
+
+```{r}
+test.mat=model.matrix(price ~ size + lot + bath + bedrooms + agestandardized + garagesize + status + elem, data = test, nvmax = 13)
+```
+
+```{r}
+val.errors = rep(NA, 13)
+for(i in 1:13) {
+coefi=coef(regfit.best,id=i)    
+pred=test.mat[,names(coefi)]%*%coefi
+val.errors[i] = mean((test$price-pred)^2)   
+}
+```
+
+```{r}
+val.errors
+which.min(val.errors)
+coef(regfit.best,5 )
+```
+Our best model appears to be the fifth model as it has the smallest valiedation error.
+
+```{r}
+model3 <- lm(price ~ size + lot + status + elem, data = Housing)
+summary(model3)
+```
++We have an ok but not great r squared, a bad f-statistic, and a good p-value
+
+#### e. Next, use either Ridge Regression or Lasso Regression with the training data, and use cross validation via the cv.glmnet function to determine the best λ value.  The model from this step with the best λ value will be your fourth candidate model.
+
+```{r}
+set.seed(13)
+library(Matrix)
+train.m<-model.matrix(price~.,data=train)
+test.m<-model.matrix(price~.,data=test)
+
+
+
+grid<-10^seq(4,-2,length=100)
+
+library(glmnet)
+ridge<-glmnet(train.m,train$price,alpha=0,lambda=grid,thresh = 1e-12)
+
+
+cv.ridge<-cv.glmnet(train.m,train$price,alpha=0,lambda=grid,thresh=1e-12)
+
+
+ridgebestlam<-cv.ridge$lambda.min
+ridgebestlam
+```
+
++ The best $\lamba$ for the ridge approach is 57.22368.
+
+```{r}
+set.seed(13)
+pred.ridge<-predict(ridge,s=ridgebestlam,newx =test.m)
+
+mean((test$price-pred.ridge)^2)
+```
++ The mean squared error of the ridge regression model is 2615.983
+
+
+#### f. Finally, use either  principal components regression or partial least squares regression for the training data.  Use cross validation (see the class notes or the Chapter 6 Lab from the text) to help you determine the number of components in the model and briefly explain your choice.  This model will be your 5th candidate model.
+```{r}
+library(pls)
+plsrmodel<-plsr(price~.,data=train,scale=TRUE,validation="CV")
+
+validationplot(plsrmodel,val.type="MSEP")
+```
+
+M=12 in this case.
+
+```{r}
+predict.plsr<-predict(plsrmodel,test,ncomp=12)
+mean((test$price-predict.plsr)^2)
+```
+
+In this model, the MSE is 3411.355 
+
+#### g. For each of the five candidate models, calculate the mean square error for predicting the outcomes in the test data set that you created in part c.   Based on this comparison, which model do you prefer for this situation?
+
+```{r}
+set.seed(13)
+pred.m1<-predict(model1,test)
+pred.m2<-predict(model2,test)
+pred.m3<-predict(model3,test)
+```
+
+
+
+
+```{r}
+test.avg <- mean(test$price)
+#WE NEED TO PUT ALL THE MODELS HERE
+model1.r2 <- 1 - mean((pred.m1 - test$price)^2) / mean((test.avg - test$price)^2)
+
+model2.r2 <- 1 - mean((pred.m2 - test$price)^2) / mean((test.avg - test$price)^2)
+
+model3.r2 <- 1 - mean((pred.m3 - test$price)^2) / mean((test.avg - test$price)^2)
+#Ridge model
+ridge.r2 <- 1 - mean((pred.ridge - test$price)^2) / mean((test.avg - test$price)^2)
+#PLS model
+pls.r2 <- 1 - mean((predict.plsr - test$price)^2) / mean((test.avg - test$price)^2)
+```
+
+```{r}
+model1.r2
+model2.r2
+model3.r2
+ridge.r2
+pls.r2
+```
+
+As shown here, the second model, using regsubsets over the entire dataset with backward selection, has the highest and most favorable r squared value, followed closely by the regsubsets on the training data.
+
+```{r}
+#MSE
+#Model1
+set.seed(13)
+pred.m1<-predict(model1,test)
+mean((test$price-pred.m1)^2)
+#Model2
+pred.m2<-predict(model2,test)
+mean((test$price-pred.m2)^2)
+#Model3
+pred.m3<-predict(model3,test)
+mean((test$price-pred.m3)^2)
+#Ridge
+pred.ridge<-predict(ridge,s=ridgebestlam,newx =test.m)
+mean((test$price-pred.ridge)^2)
+#PSLR
+predict.plsr<-predict(plsrmodel,test,ncomp=12)
+mean((test$price-predict.plsr)^2)
+```
+
+The highest MSE is for the PSLR model, but it is still unlikely that it is a good model at all because the r-squared value was so bad.
+
+```{r}
+summary(model3)
+```
+
+It looks like the best model is Model 3. This has the best r-squared and MSE combination.
++ The r-square of .4995 means that the model does a good job of explaining close to half of the data
++this model minimizes the MSE well making it an easy to understand model
++Also, the p-value suggested high significance and that the model is a good fit for the data

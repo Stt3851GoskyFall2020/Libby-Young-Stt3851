@@ -1,0 +1,35 @@
+---
+title: "Homework 6"
+author: Libby Young and Zoe Robino
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center", comment = NA, options(scipen=999))
+library(tidyverse)
+library(knitr)
+library(dplyr)
+library(moderndive)
+library(ggplot2)
+
+library(ISLR)
+library(skimr)
+library(plotly)
+
+```
+
+# Question 9 from Chapter 6
+
+#### a. split the data set into a training set and test set
+
+```{r}
+library(ISLR)
+attach(College)
+set.seed(17)
+
+trainset = sample(1:dim(College)[1],dim(College)[1]/2)
+testset = --trainset
+train <- College[,trainset]
+test <- College[,testset]
+
+```
